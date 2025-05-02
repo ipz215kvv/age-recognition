@@ -1,23 +1,23 @@
 import cv2
 import numpy as np
 
+from utils import proccess_image
+
 
 def esc_pressed():
     return cv2.waitKey(1) & 0xFF == 27
 
 
 class Face:
-    def __init__(self, image, size=64):
+    def __init__(self, image):
         self.image = image
-        self.size = size
         self.is_highlighted = True
         self.text = None
 
     @property
     def as_matrix(self):
-        resized = cv2.resize(self.image, (self.size, self.size))
-        normalized = resized / 255.0
-        return np.expand_dims(normalized, axis=0)
+        image = proccess_image(self.image)
+        return np.expand_dims(image, axis=0)
 
 
 class Camera:
