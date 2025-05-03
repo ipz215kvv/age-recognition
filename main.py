@@ -15,7 +15,7 @@ def test_model():
 
 def train_model():
     dataset_path = input("Enter dataset path: ")
-    save_path = input("Enter save path for a model: ")
+    save_path = input("Enter save path for a model(with `.keras` extension): ")
     model = Model()
     model.load_from_dataset(dataset_path, save_path)
     print("Model trained successfuly")

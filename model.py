@@ -5,8 +5,8 @@ from pathlib import Path
 
 from tensorflow.keras.models import Sequential, load_model
 from tensorflow.keras.layers import Conv2D, MaxPooling2D, Flatten, Dense, Dropout
+from tensorflow.keras.callbacks import ModelCheckpoint
 from tensorflow.keras.optimizers import Adam
-from sklearn.model_selection import train_test_split
 
 from utils import proccess_image
 
@@ -18,7 +18,7 @@ class Model:
         save_path="model.keras",
     ):
         X, y = self.load_data(dataset_path)
-        self.model = self.train(X, y)
+        self.model = self.train(X, y, save_path)
         self.model.save(save_path)
 
     def load_from_model(self, model_path="model.keras"):
@@ -56,8 +56,7 @@ class Model:
         ages = np.array(ages)
         return images, ages
 
-    def train(self, X, y):
-        X_train, _, y_train, _ = train_test_split(X, y, test_size=0.2)
+    def train(self, X, y, save_path):
         model = Sequential(
             [
                 Conv2D(32, (3, 3), activation="relu", input_shape=(64, 64, 3)),
@@ -76,7 +75,14 @@ class Model:
         model.compile(optimizer=Adam(learning_rate=0.001), loss="mse", metrics=["mae"])
 
         model.summary()
-        model.fit(X_train, y_train, epochs=10, batch_size=32, validation_split=0.1)
+        model.fit(
+            X,
+            y,
+            epochs=10,
+            batch_size=32,
+            validation_split=0.1,
+            callbacks=[ModelCheckpoint(save_path, save_best_only=True)],
+        )
         return model
 
     def predict(self, image_matrix):
