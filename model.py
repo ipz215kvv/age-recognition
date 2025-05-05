@@ -1,23 +1,26 @@
-import os, cv2
+import cv2
 import numpy as np
 from datetime import datetime
 from pathlib import Path
+from concurrent.futures import ThreadPoolExecutor
 
 from tensorflow.keras.models import Sequential, load_model
 from tensorflow.keras.layers import Conv2D, MaxPooling2D, Flatten, Dense, Dropout
 from tensorflow.keras.callbacks import ModelCheckpoint
-from tensorflow.keras.optimizers import Adam
+from sklearn.model_selection import train_test_split
 
-from utils import proccess_image
+from utils import process_image
 
 
 class Model:
     def load_from_dataset(
         self,
-        dataset_path="./UTKFace Dataset/",
+        dataset_path="./UTKFace/",
         save_path="model.keras",
     ):
+        dataset_path = Path(dataset_path)
         X, y = self.load_data(dataset_path)
+
         self.model = self.train(X, y, save_path)
         self.model.save(save_path)
 
@@ -25,7 +28,8 @@ class Model:
         self.model = load_model(model_path)
 
     def filename_to_info(self, filename):
-        info = Path(filename).stem
+        extension = ".jpg.chip.jpg"
+        info = filename[: -len(extension)]
         age, gender, race, timestamp = info.split("_")
         timestamp_format = "%Y%m%d%H%M%S%f"
         timestamp = timestamp + "000"
@@ -37,26 +41,28 @@ class Model:
         )
 
     def load_data(self, dataset_path):
-        images = []
-        ages = []
+        file_list = [file for file in dataset_path.iterdir() if file.is_file()]
 
-        for filename in os.listdir(dataset_path):
+        def process_file(filename):
             try:
-                age, _, _, _ = self.filename_to_info(filename)
-                ages.append(age)
+                age, _, _, _ = self.filename_to_info(filename.name)
+                image = cv2.imread(str(filename))
+                image = process_image(image)
+                return image, age
+            except Exception as e:
+                return None
 
-                image_path = os.path.join(dataset_path, filename)
-                image = cv2.imread(image_path)
-                image = proccess_image(image)
-                images.append(image)
-            except Exception:
-                continue
+        with ThreadPoolExecutor() as executor:
+            results = list(executor.map(process_file, file_list))
 
-        images = np.array(images)
-        ages = np.array(ages)
-        return images, ages
+        results = [obj for obj in results if obj is not None]
+        images, ages = zip(*results)
+
+        return np.array(images), np.array(ages)
 
     def train(self, X, y, save_path):
+        X_train, X_test, y_train, y_test = train_test_split(X, y)
+
         model = Sequential(
             [
                 Conv2D(32, (3, 3), activation="relu", input_shape=(64, 64, 3)),
@@ -72,17 +78,18 @@ class Model:
             ]
         )
 
-        model.compile(optimizer=Adam(learning_rate=0.001), loss="mse", metrics=["mae"])
+        model.compile(optimizer="adam", loss="mse", metrics=["accuracy"])
 
         model.summary()
         model.fit(
-            X,
-            y,
+            X_train,
+            y_train,
             epochs=10,
             batch_size=32,
-            validation_split=0.1,
+            validation_data=(X_test, y_test),
             callbacks=[ModelCheckpoint(save_path, save_best_only=True)],
         )
+        test_loss, test_accuracy = model.evaluate(X_test, y_test)
         return model
 
     def predict(self, image_matrix):

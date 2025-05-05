@@ -1,7 +1,7 @@
 import cv2
 import numpy as np
 
-from utils import proccess_image
+from utils import process_image
 
 
 def esc_pressed():
@@ -16,7 +16,7 @@ class Face:
 
     @property
     def as_matrix(self):
-        image = proccess_image(self.image)
+        image = process_image(self.image)
         return np.expand_dims(image, axis=0)
 
 
