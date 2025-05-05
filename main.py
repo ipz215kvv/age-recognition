@@ -10,7 +10,7 @@ def test_model():
     with Camera() as camera:
         for face in camera.faces:
             age = model.predict(face.as_matrix)
-            face.text = f"Age: {age}"
+            face.text = f"Age: {int(age)}"
 
 
 def train_model():
