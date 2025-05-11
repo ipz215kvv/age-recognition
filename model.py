@@ -4,15 +4,38 @@ from datetime import datetime
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
 
-from tensorflow.keras.models import Sequential, load_model
-from tensorflow.keras.layers import Conv2D, MaxPooling2D, Flatten, Dense, Dropout
+from tensorflow.keras.models import Sequential, load_model, Model as TfModel
+from tensorflow.keras.layers import (
+    Conv2D,
+    MaxPooling2D,
+    Flatten,
+    Dense,
+    Dropout,
+    GlobalAveragePooling2D,
+    Input,
+)
 from tensorflow.keras.callbacks import ModelCheckpoint
 from sklearn.model_selection import train_test_split
 
-from utils import process_image
+from utils import process_image, INPUT_SHAPE
 
 
 class Model:
+    def __init__(self, base_model=None):
+        if base_model:
+            base_model.trainable = True
+            for layer in base_model.layers[:-20]:
+                layer.trainable = False
+
+            x = base_model.output
+            x = GlobalAveragePooling2D()(x)
+            x = Dense(64, activation="relu")(x)
+            x = Dropout(0.5)(x)
+            predictions = Dense(1)(x)
+            self.model = TfModel(inputs=base_model.input, outputs=predictions)
+        else:
+            self.model = None
+
     def load_from_dataset(
         self,
         dataset_path="./UTKFace/",
@@ -21,6 +44,22 @@ class Model:
         dataset_path = Path(dataset_path)
         X, y = self.load_data(dataset_path)
 
+        if not self.model:
+            self.model = Sequential(
+                [
+                    Input(INPUT_SHAPE),
+                    Conv2D(32, (3, 3), activation="relu"),
+                    MaxPooling2D(2, 2),
+                    Conv2D(64, (3, 3), activation="relu"),
+                    MaxPooling2D(2, 2),
+                    Conv2D(128, (3, 3), activation="relu"),
+                    MaxPooling2D(2, 2),
+                    Flatten(),
+                    Dense(128, activation="relu"),
+                    Dropout(0.5),
+                    Dense(1),
+                ]
+            )
         self.model = self.train(X, y, save_path)
         self.model.save(save_path)
 
@@ -63,25 +102,10 @@ class Model:
     def train(self, X, y, save_path):
         X_train, X_test, y_train, y_test = train_test_split(X, y)
 
-        model = Sequential(
-            [
-                Conv2D(32, (3, 3), activation="relu", input_shape=(64, 64, 3)),
-                MaxPooling2D(2, 2),
-                Conv2D(64, (3, 3), activation="relu"),
-                MaxPooling2D(2, 2),
-                Conv2D(128, (3, 3), activation="relu"),
-                MaxPooling2D(2, 2),
-                Flatten(),
-                Dense(128, activation="relu"),
-                Dropout(0.5),
-                Dense(1),
-            ]
-        )
+        self.model.compile(optimizer="adam", loss="mse", metrics=["mae"])
 
-        model.compile(optimizer="adam", loss="mse", metrics=["accuracy"])
-
-        model.summary()
-        model.fit(
+        self.model.summary()
+        self.model.fit(
             X_train,
             y_train,
             epochs=10,
@@ -89,8 +113,8 @@ class Model:
             validation_data=(X_test, y_test),
             callbacks=[ModelCheckpoint(save_path, save_best_only=True)],
         )
-        test_loss, test_accuracy = model.evaluate(X_test, y_test)
-        return model
+        test_loss, test_accuracy = self.model.evaluate(X_test, y_test)
+        return self.model
 
     def predict(self, image_matrix):
         assert hasattr(self, "model")
